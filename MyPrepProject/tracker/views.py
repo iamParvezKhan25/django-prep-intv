@@ -34,8 +34,11 @@ def check_out(request):
 def dashboard(request):
     user = request.user
     kolkata_tz = pytz.timezone('Asia/Kolkata')
-    records = TimeRecord.objects.filter(user=user, date=timezone.now().date())
 
+    # Fetch records for the current day and order by check_in time in descending order
+    records = TimeRecord.objects.filter(user=user, date=timezone.now().date()).order_by('-check_in')
+
+    # Convert UTC times to Asia/Kolkata timezone
     for record in records:
         record.check_in = record.check_in.astimezone(kolkata_tz)
         if record.check_out:
@@ -51,8 +54,15 @@ def dashboard(request):
     # Convert total seconds to HH:MM:SS format
     total_time = str(timedelta(seconds=int(total_seconds)))
 
+    # Calculate remaining time (8 hours 30 minutes = 30600 seconds)
+    work_limit_seconds = 8 * 3600 + 30 * 60  # 8 hours 30 minutes in seconds
+    remaining_seconds = max(0, work_limit_seconds - total_seconds)
+    total_remain_time = str(timedelta(seconds=int(remaining_seconds)))
+
     context = {
         'records': records,
         'total_time': total_time,
+        'total_remain_time': total_remain_time,  # Add remaining time to context
     }
     return render(request, 'dashboards.html', context)
+
