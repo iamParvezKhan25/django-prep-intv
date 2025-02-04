@@ -32,6 +32,10 @@
         .button:hover {
             background-color: #0056b3;
         }
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
         .record {
             margin-bottom: 15px;
             padding: 10px;
@@ -56,6 +60,11 @@
             border-radius: 50%;
             animation: blink 1s infinite;
         }
+        .completed-status {
+            color: green;
+            font-weight: bold;
+            animation: blink 1s infinite;
+        }
         @keyframes blink {
             0% { opacity: 1; }
             50% { opacity: 0; }
@@ -75,63 +84,197 @@
             height: 12px;
             background-color: black;
         }
-        .pause-icon::before {
-            left: 0;
-        }
-        .pause-icon::after {
-            right: 0;
-        }
+        .pause-icon::before { left: 0; }
+        .pause-icon::after { right: 0; }
+
+        .active-session {
+        color: green;
+        font-weight: bold;
+        animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+        0% { opacity: 1; }
+        50% { opacity: 0.4; }
+        100% { opacity: 1; }
+    }
+
+    .session-duration {
+        color: #333;
+        font-size: 14px;
+        font-weight: bold;
+    }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Office Time Tracker</h1>
-        <p><strong>Total Hours Worked Today:</strong> {{ total_time }}</p>
+        <p><strong>Total Hours Worked Today:</strong> <span id="totalWorkedTime">00:00:00</span></p>
+        <p><strong>Remaining Working Time:</strong> <span id="remainingTime">08:30:00</span></p>
 
         <!-- Status Indicator -->
         <div id="statusIndicator" class="status" style="display: none;"></div>
 
-        <form action="{% url 'check_in' %}" method="post" onsubmit="setStatus('working')">
+        <form id="checkInForm" action="{% url 'check_in' %}" method="post" onsubmit="setStatus('working')">
             {% csrf_token %}
-            <button type="submit" class="button">Check In</button>
+            <button type="submit" id="checkInBtn" class="button">Check In</button>
         </form>
 
-        <form action="{% url 'check_out' %}" method="post" onsubmit="setStatus('paused')">
+        <form id="checkOutForm" action="{% url 'check_out' %}" method="post" onsubmit="setStatus('paused')">
             {% csrf_token %}
-            <button type="submit" class="button">Check Out</button>
+            <button type="submit" id="checkOutBtn" class="button" disabled>Check Out</button>
         </form>
 
         <h2>Today's Records</h2>
         {% for record in records %}
-            <div class="record">
+            <div class="record" data-checkin="{{ record.check_in.timestamp }}" data-checkout="{% if record.check_out %}{{ record.check_out.timestamp }}{% else %}null{% endif %}">
                 <p><strong>Check In:</strong> {{ record.check_in|date:"d:m:Y H:i:s" }}</p>
-                <p><strong>Check Out:</strong> {{ record.check_out|date:"d:m:Y H:i:s"|default:"Not checked out yet" }}</p>
+                <p><strong>Check Out:</strong>
+                    {% if record.check_out %}
+                        {{ record.check_out|date:"d:m:Y H:i:s" }}
+                    {% else %}
+                        <span class="active-session">Active Session ⏱️</span>
+                    {% endif %}
+                </p>
+                <p><strong>Duration:</strong> <span class="session-duration">Calculating...</span></p>
             </div>
         {% endfor %}
+
     </div>
 
     <script>
-        // Function to set status based on check-in/out
-        function setStatus(status) {
-            const statusIndicator = document.getElementById('statusIndicator');
-            statusIndicator.style.display = 'flex';
+    let totalWorkedSeconds = 0;
+    const workLimitSeconds = 8 * 3600 + 30 * 60;  // 8 hours 30 minutes in seconds
+    let timerInterval = null;
+    let checkInTimestamp = null;
 
-            if (status === 'working') {
-                statusIndicator.innerHTML = `<div class="blinking-dot"></div> Working...`;
-                localStorage.setItem('status', 'working');  // Save status to localStorage
-            } else if (status === 'paused') {
-                statusIndicator.innerHTML = `<div class="pause-icon"></div> Paused`;
-                localStorage.setItem('status', 'paused');  // Save status to localStorage
+    // Convert seconds to HH:MM:SS
+    function formatTime(seconds) {
+        const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+
+    // Set working or paused status
+    function setStatus(status) {
+        const statusIndicator = document.getElementById('statusIndicator');
+        const checkInBtn = document.getElementById('checkInBtn');
+        const checkOutBtn = document.getElementById('checkOutBtn');
+
+        statusIndicator.style.display = 'flex';
+
+        if (status === 'working') {
+            statusIndicator.innerHTML = `<div class="blinking-dot"></div> Working...`;
+            checkInBtn.disabled = true;
+            checkOutBtn.disabled = false;
+            localStorage.setItem('status', 'working');
+
+            checkInTimestamp = Date.now();
+            localStorage.setItem('checkInTimestamp', checkInTimestamp);
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(updateClocks, 1000);
+
+        } else if (status === 'paused') {
+            statusIndicator.innerHTML = `<div class="pause-icon"></div> Paused`;
+            checkInBtn.disabled = false;
+            checkOutBtn.disabled = true;
+            localStorage.setItem('status', 'paused');
+
+            if (checkInTimestamp) {
+                const sessionDuration = Math.floor((Date.now() - checkInTimestamp) / 1000);
+                totalWorkedSeconds += sessionDuration;
+                localStorage.setItem('workedSeconds', totalWorkedSeconds);
+                checkInTimestamp = null;
+                localStorage.removeItem('checkInTimestamp');
+            }
+
+            clearInterval(timerInterval);
+            updateClocks();
+        }
+
+        checkWorkingHoursCompletion();
+    }
+
+    // Update Total Worked Time & Remaining Time
+    function updateClocks() {
+        let currentSessionSeconds = 0;
+
+        if (checkInTimestamp) {
+            currentSessionSeconds = Math.floor((Date.now() - checkInTimestamp) / 1000);
+        }
+
+        const totalSeconds = totalWorkedSeconds + currentSessionSeconds;
+
+        document.getElementById('totalWorkedTime').textContent = formatTime(totalSeconds);
+        const remainingSeconds = workLimitSeconds - totalSeconds;
+        document.getElementById('remainingTime').textContent = formatTime(Math.max(0, remainingSeconds));
+
+        checkWorkingHoursCompletion();
+    }
+
+    // Check if working hours are completed
+    function checkWorkingHoursCompletion() {
+        const totalTime = totalWorkedSeconds + (checkInTimestamp ? Math.floor((Date.now() - checkInTimestamp) / 1000) : 0);
+        if (totalTime >= workLimitSeconds) {
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.innerHTML = `<span class="completed-status">Working Hours Completed!</span>`;
+            clearInterval(timerInterval);
+
+            document.getElementById('checkInBtn').disabled = true;
+            document.getElementById('checkOutBtn').disabled = true;
+            localStorage.setItem('status', 'completed');
+        }
+    }
+
+    // Restore status and time on page load
+    window.onload = function () {
+        const savedStatus = localStorage.getItem('status');
+        totalWorkedSeconds = parseInt(localStorage.getItem('workedSeconds')) || 0;
+        checkInTimestamp = parseInt(localStorage.getItem('checkInTimestamp')) || null;
+
+        if (savedStatus) {
+            setStatus(savedStatus);
+            if (savedStatus === 'working' && checkInTimestamp) {
+                if (timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(updateClocks, 1000);
             }
         }
 
-        // Restore status on page reload
-        window.onload = function() {
-            const savedStatus = localStorage.getItem('status');
-            if (savedStatus) {
-                setStatus(savedStatus);
+        updateClocks();
+    };
+
+    function formatTime(seconds) {
+        const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+        const s = String(seconds % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    }
+
+    function updateDurations() {
+        const records = document.querySelectorAll('.record');
+
+        records.forEach(record => {
+            const checkInTimestamp = parseInt(record.dataset.checkin);
+            const checkOutTimestamp = record.dataset.checkout !== 'null' ? parseInt(record.dataset.checkout) : null;
+
+            let durationInSeconds = 0;
+            if (checkOutTimestamp) {
+                durationInSeconds = checkOutTimestamp - checkInTimestamp;
+            } else {
+                // Active session: calculate duration up to the current time
+                durationInSeconds = Math.floor(Date.now() / 1000) - checkInTimestamp;
             }
-        };
-    </script>
+
+            const durationElement = record.querySelector('.session-duration');
+            durationElement.textContent = formatTime(durationInSeconds);
+        });
+    }
+
+    // Initial call and real-time update every second
+    updateDurations();
+    setInterval(updateDurations, 1000);
+</script>
 </body>
 </html>

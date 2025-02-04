@@ -9,4 +9,4 @@ from .models import TimeRecord
 class TimeRecordAdmin(admin.ModelAdmin):
     list_display = ('user', 'check_in', 'check_out', 'date', 'total_time')
     list_filter = ('date', 'user')
-    search_fields = ('user',)
+    search_fields = ('user', 'date')
