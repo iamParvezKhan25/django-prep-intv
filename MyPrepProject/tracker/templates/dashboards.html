@@ -17,6 +17,7 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
         }
         .button {
             padding: 10px 20px;
@@ -37,6 +38,49 @@
             background-color: #e9ecef;
             border-radius: 5px;
         }
+
+        /* Status Styles */
+        .status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .blinking-dot {
+            width: 12px;
+            height: 12px;
+            background-color: red;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .pause-icon {
+            width: 12px;
+            height: 12px;
+            background-color: black;
+            position: relative;
+        }
+        .pause-icon::before, .pause-icon::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            width: 4px;
+            height: 12px;
+            background-color: black;
+        }
+        .pause-icon::before {
+            left: 0;
+        }
+        .pause-icon::after {
+            right: 0;
+        }
     </style>
 </head>
 <body>
@@ -44,12 +88,15 @@
         <h1>Office Time Tracker</h1>
         <p><strong>Total Hours Worked Today:</strong> {{ total_time }}</p>
 
-        <form action="{% url 'check_in' %}" method="post">
+        <!-- Status Indicator -->
+        <div id="statusIndicator" class="status" style="display: none;"></div>
+
+        <form action="{% url 'check_in' %}" method="post" onsubmit="setStatus('working')">
             {% csrf_token %}
             <button type="submit" class="button">Check In</button>
         </form>
 
-        <form action="{% url 'check_out' %}" method="post">
+        <form action="{% url 'check_out' %}" method="post" onsubmit="setStatus('paused')">
             {% csrf_token %}
             <button type="submit" class="button">Check Out</button>
         </form>
@@ -62,5 +109,29 @@
             </div>
         {% endfor %}
     </div>
+
+    <script>
+        // Function to set status based on check-in/out
+        function setStatus(status) {
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.style.display = 'flex';
+
+            if (status === 'working') {
+                statusIndicator.innerHTML = `<div class="blinking-dot"></div> Working...`;
+                localStorage.setItem('status', 'working');  // Save status to localStorage
+            } else if (status === 'paused') {
+                statusIndicator.innerHTML = `<div class="pause-icon"></div> Paused`;
+                localStorage.setItem('status', 'paused');  // Save status to localStorage
+            }
+        }
+
+        // Restore status on page reload
+        window.onload = function() {
+            const savedStatus = localStorage.getItem('status');
+            if (savedStatus) {
+                setStatus(savedStatus);
+            }
+        };
+    </script>
 </body>
 </html>
