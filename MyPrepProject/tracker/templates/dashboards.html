@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Office Time Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .record {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Office Time Tracker</h1>
+        <p><strong>Total Hours Worked Today:</strong> {{ total_time }}</p>
+
+        <form action="{% url 'check_in' %}" method="post">
+            {% csrf_token %}
+            <button type="submit" class="button">Check In</button>
+        </form>
+
+        <form action="{% url 'check_out' %}" method="post">
+            {% csrf_token %}
+            <button type="submit" class="button">Check Out</button>
+        </form>
+
+        <h2>Today's Records</h2>
+        {% for record in records %}
+            <div class="record">
+                <p><strong>Check In:</strong> {{ record.check_in|date:"d:m:Y H:i:s" }}</p>
+                <p><strong>Check Out:</strong> {{ record.check_out|date:"d:m:Y H:i:s"|default:"Not checked out yet" }}</p>
+            </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

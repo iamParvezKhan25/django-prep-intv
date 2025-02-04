@@ -32,3 +32,18 @@ class ATMWithdrawalView(APIView):
             # Process withdrawal (dummy response for now)
             return Response({"message": "Withdrawal successful!"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+'''
+blogpost API
+'''
+from .models import BlogPost
+from .serializers import BlogPostSerializer
+
+class BlogPostView(APIView):
+    def post(self, request):
+        serializer = BlogPostSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

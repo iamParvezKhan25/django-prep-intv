@@ -8,4 +8,5 @@ urlpatterns = [
     path('view2/', views.view2, name='view2'),
     path('view3/', views.view3, name='view3'),
     path('withdrawal/', ATMWithdrawalView.as_view(), name='atm-withdrawal'),
+    path('blogpost/', views.BlogPostView.as_view(), name='blogpost'),
 ]
